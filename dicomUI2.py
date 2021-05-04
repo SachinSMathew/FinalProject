@@ -26,7 +26,7 @@ from datetime import date
 dicomRoiCollection = {} #tempRoicollection variable
 ROICollection = {}  #collection to be saved to JSON
 
-roiIndex = -1 # changed from -1 -> 1
+roiIndex = 1 # changed from -1 -> 1
 datasetUser = ''
 
 tempFFC = {}
@@ -171,46 +171,47 @@ class dicomeViewer(QDialog):
         today = date.today()
         today = today.strftime("%d/%m/%Y")
         tempRoiMean = 0
-        tempFFC = tempRoi[0]["roiMatrix"]       
-        index+=1
+
+        try:
+            tempFFC = tempRoi[1]["roiMatrix"]       # changed from 0 -> 1
+        except KeyError:
+            print("error")
+
         for i in range(index):
             try:
-                tempRoiMean += tempRoi[i]["roiMean"] 
-                if(index > i+1):
-                    tempFFC = np.add(tempFFC, tempRoi[i+1]["roiMean"])
+                tempRoiMean += tempRoi[i+1]["roiMean"] # changed from i -> i + 1
+                if(index > i+2):
+                    tempFFC = np.add(tempFFC, tempRoi[i+2])
             except KeyError:
                 print("error")
                 
         if(index != 0):
             tempRoiMean = tempRoiMean / index
 
-        tempFFC = tempFFC.tolist()
+        tempFFC = tempFFC.tolist() # changed from tempFFC.tolist() -> list (tempFFC)
         print (type (tempFFC))
 
         ROICollection[today] = {
-            #"ffc": tempFFC,
+            "ffc": tempFFC,
             "ffcMean": tempRoiMean
         }
 
-        #delete this when Save button is implemented.
         url = self.roiJsonLoc + self.currentUser + '_ffc.json'
         print (url)
         
         with open(url, 'a') as jsonFile:
             json.dump(ROICollection, jsonFile)
-        #this much...
-        
-    #save button function.
-    def saveStudy(self):
-        url = self.roiJsonLoc + self.currentUser + '_ffc.json'
-        print (url)
-        with open(url, 'a') as jsonFile:
-            json.dump(ROICollection, jsonFile) 
-
+##            try:
+##                data = json.load(jsonFile)
+##                data.update(ROICollection)
+##                jsonFile.seek(0)
+##                json.dump(ROICollection, jsonFile)
+##                print ("ok")
+##            except:
+##                print ("Error")
+##                json.dump({}, jsonFile)
+            
     def roi_selection(self):
-        global roiIndex 
-        roiIndex+=1
-        print(roiIndex)
         roiIPdcmFile = self.dcmIPFileName
         roiOPdcmFile = self.dcmOPFileName
 
@@ -265,7 +266,7 @@ class dicomeViewer(QDialog):
         
         ffc = ((diff) / (2 * dcmCropIP))*100
         ffcMean = np.mean(ffc)
-        #print (roiIndex)
+        print (roiIndex)
         dicomRoiCollection[roiIndex] = {
             "roiMatrix": ffc,
             "roiMean":ffcMean 
@@ -273,9 +274,9 @@ class dicomeViewer(QDialog):
 
         cv2.imshow("FF",ffc)
 
-        if(roiIndex >=2 ):
+        if(roiIndex == 1):
             self.meanFFCGenerator(dicomRoiCollection, roiIndex)
-        print("Current ROI fatfraction Mean: ", ffcMean)
+        print("fatfraction Mean: ", ffcMean)
     
         #url = "ffcData.json"
         #json.dump(ROICollection, open(url, "w"))
