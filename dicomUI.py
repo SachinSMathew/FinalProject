@@ -18,18 +18,14 @@ from PyQt5.QtGui import QImage
 from PyQt5.QtCore import QTimer
 
 from datetime import date
-##from collections import defaultdict
-
-##dicomRoiCollection = defaultdict(dict) #tempRoicollection variable
-##ROICollection = defaultdict(dict)  #collection to be saved to JSON
 
 dicomRoiCollection = {} #tempRoicollection variable
 ROICollection = {}  #collection to be saved to JSON
 
-roiIndex = 1 # changed from -1 -> 1
+roiIndex = -1 # changed from -1 -> 1
 datasetUser = ''
 
-tempFFC = {}
+
 
 
 class dicomeViewer(QDialog):
@@ -46,6 +42,8 @@ class dicomeViewer(QDialog):
 
         self.brightSlid.valueChanged['int'].connect (self.brightness_value)
         self.contrastSlid.valueChanged['int'].connect (self.blur_value)
+
+        self.saveStdyBtn.clicked.connect (self.saveStudy)
         
         cwdlst = []
         cwdlst = os.getcwd().split ('\\')
@@ -168,50 +166,47 @@ class dicomeViewer(QDialog):
         plt.show()
 
     def meanFFCGenerator(self, tempRoi, index):
-        today = date.today()
-        today = today.strftime("%d/%m/%Y")
-        tempRoiMean = 0
+        today = date.today ()
+        today = today.strftime ("%d/%m/%Y")
+        url = self.roiJsonLoc  + 'ffc.json'
+        jsonFile = open(url, "r")
+        global ROICollection
+        try:    
+            ROICollection = json.load(jsonFile)
+        except:
+            ROICollection = {}
+        tempRoiMean = 0 
+        index += 1
+        print ("FFC Funtion index: ", index)
 
-        try:
-            tempFFC = tempRoi[1]["roiMatrix"]       # changed from 0 -> 1
-        except KeyError:
-            print("error")
-
-        for i in range(index):
+        for i in range (index):
             try:
-                tempRoiMean += tempRoi[i+1]["roiMean"] # changed from i -> i + 1
-                if(index > i+2):
-                    tempFFC = np.add(tempFFC, tempRoi[i+2])
+                tempRoiMean += tempRoi [i]["roiMean"] 
             except KeyError:
-                print("error")
+                print ("error")
                 
         if(index != 0):
             tempRoiMean = tempRoiMean / index
 
-        tempFFC = tempFFC.tolist() # changed from tempFFC.tolist() -> list (tempFFC)
-        print (type (tempFFC))
 
         ROICollection[today] = {
-            "ffc": tempFFC,
             "ffcMean": tempRoiMean
         }
-
-        url = self.roiJsonLoc + self.currentUser + '_ffc.json'
-        print (url)
+        print(ROICollection,"Line 198")
+        self.FFCMnVal.setText (str (tempRoiMean))
         
-        with open(url, 'a') as jsonFile:
-            json.dump(ROICollection, jsonFile)
-##            try:
-##                data = json.load(jsonFile)
-##                data.update(ROICollection)
-##                jsonFile.seek(0)
-##                json.dump(ROICollection, jsonFile)
-##                print ("ok")
-##            except:
-##                print ("Error")
-##                json.dump({}, jsonFile)
-            
+    def saveStudy (self):
+        url = self.roiJsonLoc  + 'ffc.json'
+        print (url)
+        print(ROICollection,"Line 204")
+        with open(url, 'w') as jsonFile:
+            json.dump(ROICollection, jsonFile) 
+
     def roi_selection(self):
+        global roiIndex 
+        roiIndex += 1
+        print ("Index: ", roiIndex)
+
         roiIPdcmFile = self.dcmIPFileName
         roiOPdcmFile = self.dcmOPFileName
 
@@ -226,6 +221,7 @@ class dicomeViewer(QDialog):
         scalopAry = cv2.convertScaleAbs(opAryroi)
         
         r = cv2.selectROI (scalipAry)
+        self.ROIposVal.setText (str (r))
 
         dcmCropIP = ipAryroi [int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])]
         dcmCropOP = opAryroi [int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])]
@@ -263,23 +259,32 @@ class dicomeViewer(QDialog):
         f = open("roiDIF.txt", "w")
         f.write(tempROI)
         f.close()
-        
-        ffc = ((diff) / (2 * dcmCropIP))*100
-        ffcMean = np.mean(ffc)
-        print (roiIndex)
+
+        try:
+            ffc = ((diff) / (2 * dcmCropIP))*100
+            ffcMean = np.mean(ffc)
+        except KeyError:
+            print ("error in computation")
+
         dicomRoiCollection[roiIndex] = {
             "roiMatrix": ffc,
             "roiMean":ffcMean 
         }
 
-        cv2.imshow("FF",ffc)
+        cv2.imshow ("FF", ffc)
 
-        if(roiIndex == 1):
+        ffcArray = cv2.convertScaleAbs(ffc)
+        ffcIMG = QImage(ffcArray, ffcArray.shape[1], ffcArray.shape[0], ffcArray.strides[0], QImage.Format_Indexed8).rgbSwapped()
+
+        self.ffcView.setPixmap (QtGui.QPixmap.fromImage (ffcIMG))
+        self.ffcView.setScaledContents (True)
+        
+        print ("")
+        
+        if(roiIndex >=2 ):
             self.meanFFCGenerator(dicomRoiCollection, roiIndex)
-        print("fatfraction Mean: ", ffcMean)
-    
-        #url = "ffcData.json"
-        #json.dump(ROICollection, open(url, "w"))
+        print("Current ROI fatfraction Mean: ", ffcMean)
+        self.CrntFFCVal.setText (str (ffcMean))
 
     def brightness_value (self,value):
         self.brightness_value_now = value * 2
